@@ -1,19 +1,21 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards #-}
 module Main where
 
-import Prelude hiding (concat)
+import Prelude hiding (lines)
 import Shelly hiding (fromText)
 import System.Environment
 import Data.Maybe
-import Data.Text (pack, unpack, intercalate, append)
-import Control.Monad hiding (join)
-import Control.Monad.Trans.Class
-import Control.Monad.Trans.Maybe
+import Data.Text (pack, unpack, intercalate, append, lines)
 import Text.Regex.Applicative
 import Data.Char
 
-data TorrentId = TorrentId Integer | FaultyTorrentId Integer deriving Show
-data DonePct = DonePct Integer deriving Show
+-- XXX TODO Maybe return from (=~) is all well and good until `read` fails on an int...
+--          How best to handle this? A better way to invoke than =~ ?
+type TorrentId = Integer
+type Faulty = Bool
+data DonePct = DoneNA
+             | DonePct Integer deriving (Eq, Show)
 data Have = NoHave
           | Have { haveAmount :: Float
                  , haveUnits  :: String } deriving Show
@@ -35,10 +37,22 @@ data Status = Bidirectional
             | WillVerify
             | OtherStatus String deriving Show
 type Name = String
-data StatusLine = StatusLine TorrentId DonePct Have ETA Up Down Ratio Status Name deriving Show
+-- TODO move to own module and the remove sl prefix and expot
+data StatusLine = StatusLine { slId :: TorrentId
+                             , slFaulty :: Faulty
+                             , slDone :: DonePct
+                             , slHave :: Have
+                             , slEta :: ETA
+                             , slUp :: Up
+                             , slDown :: Down
+                             , slRatio :: Ratio
+                             , slStatus :: Status
+                             , slName :: Name
+                             } deriving Show
 
 statusLine = StatusLine <$  spaces
-                        <*> torrentId <* spaces
+                        <*> torrentId
+                        <*> faulty <* spaces
                         <*> donePct <* spaces
                         <*> have <* spaces
                         <*> eta <* spaces
@@ -50,9 +64,11 @@ statusLine = StatusLine <$  spaces
     where spaces = many (psym isSpace)
           intfmt = liftA read $ many $ psym isDigit
           floatfmt = liftA read $ many $ psym (\x -> isDigit x || (== '.') x)
-          torrentId = FaultyTorrentId <$> intfmt <* string "*"
-                  <|> TorrentId       <$> intfmt
-          donePct =  DonePct <$> (liftA read $ many $ psym isDigit) <* string "%"
+          torrentId = intfmt
+          faulty = True <$ string "*"
+               <|> pure False
+          donePct = DoneNA <$ string "n/a"
+                <|> DonePct <$> (liftA read $ many $ psym isDigit) <* string "%"
           have = NoHave <$ string "None"
              <|> Have <$> floatfmt <* psym isSpace <*> many (psym isAlpha)
           eta = Done <$ string "Done"
@@ -73,33 +89,35 @@ statusLine = StatusLine <$  spaces
                <|> OtherStatus <$> many (psym isAlpha)
           name = many anySym
 
+-- TODO replace shelly with shell-conduit, once I get that working.
+xm_bin = "transmission-remote"
+
 xm args = do
-    run_ "transmission-remote" args
+    run_ xm_bin args
 
 xmo args = do
     let op:ids = args
-    run_ "transmission-remote" ["-t" `append` intercalate "," ids, op]
+    run_ xm_bin ["-t" `append` intercalate "," ids, op]
 
 xmcheck args = do
-    getFinishedIds
+    ids <- getFinishedIds
+    run_ xm_bin ["-t" `append` intercalate "," ids, "-v"]
 
+xmf args = do
+    ids <- getFinishedIds
+    run_ xm_bin ["-t" `append` intercalate "," ids, "-l"]
+
+-- XXX TODO handle exception on parse returning Nothing
+-- XXX skip first and last line better (just handle and skip Nothing?)
 getFinishedIds = do
     tors <- run "transmission-remote" ["-l"]
-    liftIO $ print tors
-{-
-_xm_get_finished_ids() {
-    # XXX trailing , is okay
-    # FIXME string should be null if none
-    transmission-remote -l | egrep '[0-9]+ +100%' | awk '{print $1}' | tr '\n' ','
-}
-_xm_get_finished_and_idle_ids() {
-    # XXX trailing , is okay
-    # FIXME string should be null if none
-    transmission-remote -l | egrep '[0-9]+ +100%.*(Seeding|Idle)' | awk '{print $1}' | tr '\n' ','
-}
-xmf() {
-    transmission-remote -t `_xm_get_finished_ids` -l
-}
+    let _:skipFooter = (reverse . lines) tors
+    let _:skipHeader = reverse skipFooter
+    let fin = filter isFinished $ map parse skipHeader
+    return $ map (pack . show . slId) fin
+    where parse = (fromJust . (flip (=~) statusLine) . unpack)
+          isFinished StatusLine{..} = not slFaulty && slDone == DonePct 100
+{- TODO
 xmclean() {
     local XM_TORS="/home/keb/.config/transmission-daemon/torrents"
     local XM_TORS_BK="/home/keb/Downloads/_tors"
@@ -107,24 +125,18 @@ xmclean() {
     local ids=`_xm_get_finished_and_idle_ids`
     test -z "$ids" || transmission-remote -t $ids -r
 }
-xmcheck() {
-    transmission-remote -t `_xm_get_finished_ids` -v
-}
-
 -}
 
 -- TODO replace the lookup with template-haskell or something
 calls = [ ("xm", xm)
         , ("xmo", xmo)
+        , ("xmf", xmf)
         , ("xmcheck", xmcheck)
         ]
 
+-- TODO: offer to create or intelligently know when to create multi-call links
 main = do
-    text <- readFile "sample.txt"
-    forM_ (lines text) $ \line -> do
-        print $ line =~ statusLine
---main = do
---    name <- getProgName
---    args <- getArgs
---    let call = fromJust $ lookup name calls
---    shelly . verbosely $ call (map pack args)
+    name <- getProgName
+    args <- getArgs
+    let call = fromJust $ lookup name calls
+    shelly $ call (map pack args)
