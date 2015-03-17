@@ -2,11 +2,12 @@
 {-# LANGUAGE RecordWildCards #-}
 module Main where
 
-import Prelude hiding (lines)
+import Prelude hiding (lines, putStr)
 import Shelly hiding (fromText)
 import System.Environment
 import Data.Maybe
 import Data.Text (pack, unpack, intercalate, append, lines)
+import Data.Text.IO (putStr)
 import StatusParser
 import Text.Regex.Applicative
 
@@ -14,20 +15,19 @@ import Text.Regex.Applicative
 -- TODO replace shelly with shell-conduit, once I get that working.
 xm_bin = "transmission-remote"
 
-xm args = do
-    run_ xm_bin args
+xm args = run xm_bin args
 
 xmo args = do
     let op:ids = args
-    run_ xm_bin ["-t" `append` intercalate "," ids, op]
+    xm ["-t" `append` intercalate "," ids, op]
 
 xmcheck args = do
     ids <- getFinishedIds
-    run_ xm_bin ["-t" `append` intercalate "," ids, "-v"]
+    xm ["-t" `append` intercalate "," ids, "-v"]
 
 xmf args = do
     ids <- getFinishedIds
-    run_ xm_bin ["-t" `append` intercalate "," ids, "-l"]
+    xm ["-t" `append` intercalate "," ids, "-l"]
 
 -- XXX TODO handle exception on parse returning Nothing
 -- XXX skip first and last line better (just handle and skip Nothing?)
@@ -39,7 +39,7 @@ getFinishedIds = do
     return $ map (pack . show . tid) fin
     where parse = (fromJust . (flip (=~) statusLine) . unpack)
           isFinished StatusLine{..} = not faulty && done == DonePct 100
-{- TODO
+{- TODO use Aeson to parse settings.json for the paths
 xmclean() {
     local XM_TORS="/home/keb/.config/transmission-daemon/torrents"
     local XM_TORS_BK="/home/keb/Downloads/_tors"
@@ -50,10 +50,11 @@ xmclean() {
 -}
 
 -- TODO replace the lookup with template-haskell or something
-calls = [ ("xm", xm)
-        , ("xmo", xmo)
-        , ("xmf", xmf)
-        , ("xmcheck", xmcheck)
+calls = [ ("xm", xm) -- shortcut for "transmission-remote"
+        , ("xmo", xmo) -- Operate on listed ids. e.g. "xmo -v `seq 2 4`"
+        , ("xmf", xmf) -- list Finished status lines (100% and not faulty)
+        , ("xmcheck", xmcheck) -- verify finished torrents
+        --, ("xmclean", xmverify) -- use rsync to backup torrent files, then remove idle and finished torrents
         ]
 
 -- TODO: offer to create or intelligently know when to create multi-call links
@@ -61,4 +62,5 @@ main = do
     name <- getProgName
     args <- getArgs
     let call = fromJust $ lookup name calls
-    shelly $ call (map pack args)
+    out <- shelly $ silently $ call (map pack args)
+    putStr out
