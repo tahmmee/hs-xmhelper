@@ -6,7 +6,7 @@ import Prelude hiding (lines, unlines, putStr, readFile)
 import Shelly hiding (fromText)
 import System.Environment
 import Data.Maybe
-import Data.Text (pack, unpack, intercalate, append, lines, unlines, strip)
+import Data.Text (pack, unpack, intercalate, append, lines, unlines, strip, Text)
 import Data.Text.IO (putStr)
 
 import StatusParser
@@ -19,12 +19,14 @@ import Control.Monad
 -- TODO replace shelly with shell-conduit, once I get that working.
 xm args = run "transmission-remote" args
 
+xmOn :: [Integer] -> [Text] -> Sh (Text)
 xmOn [] _ = return "Nothing to do (No torrent ids given on which to operate).\n"
 xmOn ids args = xm $ ["-t" `append` intercalate "," (map (pack . show) ids)] ++ args
 
+xmo :: [Text] -> Sh (Text)
 xmo args = do
     let op:ids = args
-    xmOn ids [op]
+    xmOn (map (read . unpack) ids) [op]
 
 xmcheck args = do
     ids <- getFinishedIds
@@ -33,7 +35,6 @@ xmcheck args = do
 xmf args = do
     ids <- getFinishedIds
     xmOn ids ["-l"]
-
 
 xmclean args = do
     TransmissionConfig{..} <- liftIO getConfig
