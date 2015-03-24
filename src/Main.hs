@@ -19,6 +19,7 @@ import Control.Monad
 -- TODO replace shelly with shell-conduit, once I get that working.
 xm args = run "transmission-remote" args
 
+xmOn [] _ = return "Nothing to do (No torrent ids given on which to operate).\n"
 xmOn ids args = xm $ ["-t" `append` intercalate "," (map (pack . show) ids)] ++ args
 
 xmo args = do
@@ -33,19 +34,20 @@ xmf args = do
     ids <- getFinishedIds
     xmOn ids ["-l"]
 
+
 -- XXX TODO use Aeson to parse settings.json for the paths
 torrentsDir = "~/.config/transmission-daemon/torrents"
-torrentsDestDir = "~/Downloads/_tors"
 xmclean args = do
-    -- XXX expanding vars this way is ugly
+    TransmissionConfig{..} <- liftIO getConfig
     src <- expand torrentsDir
-    dest <- expand torrentsDestDir
-    -- TODO check rsync is in path
+    let dest = downloadDir `append` "/_torrents"
     out <- run "rsync" ["-rP", (src `append` "/"), dest]
+    -- XXX expanding vars this way is ugly
+    -- TODO check rsync is in path
     liftIO $ putStr out
     -- TODO Guard here to make sure the above executed correctly
     ids <- getFinishedIds
-    xmOn ids ["-l"]
+    xmOn ids ["-r"]
     where expand var = run "bash" ["-c" , "echo " `append` var] >>= return . strip
 
 -- XXX TODO handle exception on parse returning Nothing
@@ -59,13 +61,9 @@ getFinishedIds = do
           body = tail . reverse . tail . reverse . lines  -- strip first and last line
           isFinished StatusLine{..} = not faulty && done == DonePct 100
 
-whoAmI = lookupEnv "USER" >>= return . pack . fromJust
-getHomeDir = lookupEnv "HOME" >>= return . pack . fromJust
-
 xmtest args = do
-    --liftIO $ forM [whoAmI, getHomeDir] $ id >=> (putStrLn . unpack)
-    out <- liftIO $ forM [whoAmI, getHomeDir] id
-    return $ unlines out
+    -- test whatever here
+    return "test"
     
 
 -- TODO replace the lookup with template-haskell or something
