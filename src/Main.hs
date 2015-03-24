@@ -35,20 +35,16 @@ xmf args = do
     xmOn ids ["-l"]
 
 
--- XXX TODO use Aeson to parse settings.json for the paths
-torrentsDir = "~/.config/transmission-daemon/torrents"
 xmclean args = do
     TransmissionConfig{..} <- liftIO getConfig
-    src <- expand torrentsDir
+    src <- liftIO getConfigDir
     let dest = downloadDir `append` "/_torrents"
     out <- run "rsync" ["-rP", (src `append` "/"), dest]
-    -- XXX expanding vars this way is ugly
     -- TODO check rsync is in path
     liftIO $ putStr out
     -- TODO Guard here to make sure the above executed correctly
     ids <- getFinishedIds
     xmOn ids ["-r"]
-    where expand var = run "bash" ["-c" , "echo " `append` var] >>= return . strip
 
 -- XXX TODO handle exception on parse returning Nothing
 -- XXX skip first and last line better (just handle and skip Nothing?)
