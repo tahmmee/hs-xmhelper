@@ -20,5 +20,8 @@ executable xm
                      , shelly
                      , transformers
                      , regex-applicative
+                     , aeson
+                     , bytestring
+                     , mtl
   hs-source-dirs:      src
   default-language:    Haskell2010
