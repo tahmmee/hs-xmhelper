@@ -40,10 +40,10 @@ xmclean args = do
     TransmissionConfig{..} <- liftIO getConfig
     src <- liftIO getConfigDir
     let dest = downloadDir `append` "/_torrents"
-    out <- run "rsync" ["-rP", (src `append` "/"), dest]
+    out <- run "rsync" ["-rP", (src `append` "/torrents/"), dest]
     -- TODO check rsync is in path
     liftIO $ putStr out
-    -- TODO Guard here to make sure the above executed correctly
+    -- TODO Guard here to make sure the above executed correctly (currently failure exits uncleanly)
     ids <- getFinishedIds
     xmOn ids ["-r"]
 
