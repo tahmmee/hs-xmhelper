@@ -54,7 +54,7 @@ getFinishedIds = do
     return [ tid parsed | line <- body tors
            , let parsed = parse line
            , isFinished parsed ]
-    where parse = fromJust . (flip (=~) statusLine) . unpack
+    where parse = fromJust . (=~ statusLine) . unpack
           body = tail . reverse . tail . reverse . lines  -- strip first and last line
           isFinished StatusLine{..} = not faulty && done == DonePct 100
 

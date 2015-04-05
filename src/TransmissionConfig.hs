@@ -30,9 +30,9 @@ getConfigDir = do
     return "/var/lib/transmission/config"
     --case uid of
     --    "transmission" -> return "/var/lib/transmission/config"
-    --    _ -> getHomeDir >>= return . (flip append "/.config/transmission-daemon")
+    --    _ -> getHomeDir >>= return . (`append` "/.config/transmission-daemon")
 
-getConfigPath = getConfigDir >>= return . (flip append "/settings.json")
+getConfigPath = getConfigDir >>= return . (`append` "/settings.json")
 
 getConfig :: IO TransmissionConfig
 getConfig = do
