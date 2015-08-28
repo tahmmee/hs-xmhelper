@@ -2,12 +2,12 @@
 {-# LANGUAGE RecordWildCards #-}
 module Main where
 
-import Prelude hiding (lines, unlines, putStr, readFile)
-import Shelly hiding (fromText)
+import Turtle
+import Prelude hiding (lines, unlines, putStr, putStrLn, readFile)
 import System.Environment
 import Data.Maybe
-import Data.Text (pack, unpack, intercalate, append, lines, unlines, strip, Text)
-import Data.Text.IO (putStr)
+import Data.Text (pack, unpack, intercalate, lines, unlines, strip, Text)
+import Data.Text.IO (putStr, putStrLn)
 
 import StatusParser
 import Text.Regex.Applicative
@@ -15,15 +15,16 @@ import Text.Regex.Applicative
 import TransmissionConfig
 import Control.Monad
 
+run :: Text -> [Text] -> Shell Text
+run cmd args = inshell (intercalate " " $ [cmd] <> args) empty
 
--- TODO replace shelly with shell-conduit, once I get that working.
+xm :: [Text] -> Shell Text
 xm args = run "transmission-remote" args
 
-xmOn :: [Integer] -> [Text] -> Sh (Text)
+xmOn :: [Integer] -> [Text] -> Shell Text
 xmOn [] _ = return "Nothing to do (No torrent ids given on which to operate).\n"
-xmOn ids args = xm $ ["-t" `append` intercalate "," (map (pack . show) ids)] ++ args
+xmOn ids args = xm $ ["-t" <> intercalate "," (map (pack . show) ids)] <> args
 
-xmo :: [Text] -> Sh (Text)
 xmo args = do
     let op:ids = args
     xmOn (map (read . unpack) ids) [op]
@@ -39,8 +40,8 @@ xmf args = do
 xmclean args = do
     TransmissionConfig{..} <- liftIO getConfig
     src <- liftIO getConfigDir
-    let dest = downloadDir `append` "/_torrents"
-    out <- run "rsync" ["-rP", (src `append` "/torrents/"), dest]
+    let dest = downloadDir <> "/_torrents"
+    out <- run "rsync" ["-rP", (src <> "/torrents/"), dest]
     -- TODO check rsync is in path
     liftIO $ putStr out
     -- TODO Guard here to make sure the above executed correctly (currently failure exits uncleanly)
@@ -64,18 +65,24 @@ xmtest args = do
     
 
 -- TODO replace the lookup with template-haskell or something
-calls = [ ("xm",      xm     ) -- shortcut for "transmission-remote"
-        , ("xmo",     xmo    ) -- Operate on listed ids. e.g. "xmo -v `seq 2 4`"
-        , ("xmf",     xmf    ) -- list Finished status lines (100% and not faulty)
+calls :: [(Text, [Text] -> Shell Text)]
+calls = [ ("xm"     , xm     ) -- shortcut for "transmission-remote"
+        , ("xmo"    , xmo    ) -- Operate on listed ids. e.g. "xmo -v `seq 2 4`"
+        , ("xmf"    , xmf    ) -- list Finished status lines (100% and not faulty)
         , ("xmcheck", xmcheck) -- verify finished torrents
         , ("xmclean", xmclean) -- use rsync to backup torrent files, then remove idle and finished torrents
-        , ("xmtest", xmtest) -- XXX test
+        , ("xmtest" , xmtest) -- XXX test
         ]
 
+p s = sh (do
+    x <- s
+    liftIO (putStrLn x) )
+
 -- TODO: offer to create or intelligently know when to create multi-call links
+main :: IO ()
 main = do
-    name <- getProgName
-    args <- getArgs
+    name <- getProgName >>= return . pack
+    args <- getArgs >>= return . map pack
     let call = fromJust $ lookup name calls
-    out <- shelly $ silently $ call (map pack args)
-    putStr out
+    --view $ call args
+    p $ call args
