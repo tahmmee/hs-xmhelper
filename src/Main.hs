@@ -74,15 +74,10 @@ calls = [ ("xm"     , xm     ) -- shortcut for "transmission-remote"
         , ("xmtest" , xmtest) -- XXX test
         ]
 
-p s = sh (do
-    x <- s
-    liftIO (putStrLn x) )
-
 -- TODO: offer to create or intelligently know when to create multi-call links
 main :: IO ()
 main = do
     name <- getProgName >>= return . pack
     args <- getArgs >>= return . map pack
     let call = fromJust $ lookup name calls
-    --view $ call args
-    p $ call args
+    sh (call args >>= liftIO . putStrLn)
