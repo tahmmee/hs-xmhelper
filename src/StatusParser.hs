@@ -52,7 +52,9 @@ data StatusLine = StatusLine { tid :: TorrentId
                              , ratio :: Ratio
                              , status :: Status
                              , name :: Name
-                             } deriving Show
+                             }
+                | UnparseableStatusLine
+                deriving Show
 
 statusLine = StatusLine <$  spaces
                         <*> torrentId
@@ -65,6 +67,7 @@ statusLine = StatusLine <$  spaces
                         <*> ratio <* spaces
                         <*> status <* spaces
                         <*> name <* spaces
+         <|> UnparseableStatusLine <$ many anySym
     where spaces = many (psym isSpace)
           intfmt = liftA read $ many $ psym isDigit
           floatfmt = liftA read $ many $ psym (\x -> isDigit x || (== '.') x)
