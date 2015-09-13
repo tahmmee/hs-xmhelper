@@ -45,9 +45,10 @@ xmf args = do
 
 xmclean args = do
     TransmissionConfig{..} <- liftIO getConfig
-    src <- liftIO getConfigDir
-    let dest = downloadDir <> "/_torrents"
-    ec <- view $ shell ("rsync -rP " <> src <> " /torrents/ " <> dest) empty
+    configDir <- liftIO getConfigDir
+    let src = configDir <> "/torrents/"
+    let dst = downloadDir <> "/_torrents"
+    ec <- view $ shell (format ("rsync -rP "%s%" "%s) src dst) empty
     -- TODO check rsync is in path
     -- TODO Guard here to make sure the above executed correctly
     -- (NB currently failure exits uncleanly because of attr preservation)
